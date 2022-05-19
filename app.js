@@ -1,13 +1,15 @@
 // Practice the levels of authentication and security
 // Level 1, store user and password in plain text on server.
-// Level 2 will use mongoose-encryption module AES-256
+// Level 2 will use mongoose-encryption module AES-256, this encrypts the values, but the secret string is easily found.
+// Level 2 will add dotenv for environmental variables.
 
-
+require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
 const encrypt = require("mongoose-encryption");
+
 
 const app = express();
 
@@ -26,11 +28,10 @@ const userSchema = new mongoose.Schema({
   password: String
 });
 
-// Create secret for mongoose-encryption
+// Create secret for mongoose-encryption with .env
 // Then append a plugin to the shema object, should be BEFORE creating mongoose model.
 // This will encrypt the entire database userSchema.plugin(encrypt, { secret: secret });
-const secret = "Thisisoutlisstlesecret."; // Secret String instead of Two Keys.
-userSchema.plugin(encrypt, { secret: secret, encryptedFields: ['password'] });
+userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ['password'] });
 
 // Create mongoose model
 const User = mongoose.model("User", userSchema);
