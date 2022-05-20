@@ -2,14 +2,14 @@
 // Level 1, store user and password in plain text on server.
 // Level 2 will use mongoose-encryption module AES-256, this encrypts the values, but the secret string is easily found.
 // Level 2 will add dotenv for environmental variables.
+// Level 3 uses Hashing to securly store the password. npm i md5 (we remove mongoose Encryption)
 
 require('dotenv').config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
-
+const md5 = require("md5");
 
 const app = express();
 
@@ -28,10 +28,6 @@ const userSchema = new mongoose.Schema({
   password: String
 });
 
-// Create secret for mongoose-encryption with .env
-// Then append a plugin to the shema object, should be BEFORE creating mongoose model.
-// This will encrypt the entire database userSchema.plugin(encrypt, { secret: secret });
-userSchema.plugin(encrypt, { secret: process.env.SECRET, encryptedFields: ['password'] });
 
 // Create mongoose model
 const User = mongoose.model("User", userSchema);
@@ -40,7 +36,7 @@ const User = mongoose.model("User", userSchema);
 app.post("/register", function(req,res){
   User.create({
     email: req.body.username,
-    password: req.body.password
+    password: md5(req.body.password)
   }, function(err){
       if (err){
         console.log(err);
@@ -54,7 +50,7 @@ app.post("/register", function(req,res){
 
 app.post("/login", function(req,res){
   const username = req.body.username;
-  const password = req.body.password;
+  const password = md5(req.body.password);
   User.findOne( {email: username }, function(err, foundUser){
       if(err){
         console.log(err);
