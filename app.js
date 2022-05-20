@@ -9,7 +9,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const md5 = require("md5");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 
@@ -20,7 +21,6 @@ app.use(bodyParser.urlencoded({
 }));
 
 //require mongoose, setup local connection (or atlas ect), setup schema, create model, register post ect/
-
 mongoose.connect("mongodb://localhost:27017/userDB");
 
 const userSchema = new mongoose.Schema({
@@ -34,37 +34,48 @@ const User = mongoose.model("User", userSchema);
 
 // Create a new user from the register page.
 app.post("/register", function(req,res){
-  User.create({
-    email: req.body.username,
-    password: md5(req.body.password)
-  }, function(err){
-      if (err){
-        console.log(err);
-      }
-      else {
-        res.render("secrets");
-      }
-    } //end callback
-  ); // end create
-}); //end post
+
+  bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+    User.create({
+      email: req.body.username,
+      password: hash
+    }, function(err){
+        if (err){
+          console.log(err);
+        }
+        else {
+          res.render("secrets");
+        }
+      } // End callback
+    ); // End create
+  }); // End bcrypt
+}); // End post
 
 app.post("/login", function(req,res){
   const username = req.body.username;
-  const password = md5(req.body.password);
+  const password = req.body.password;
   User.findOne( {email: username }, function(err, foundUser){
       if(err){
         console.log(err);
-      } else if(foundUser){
-            if (foundUser.password === password){
-              console.log("Creditials Match");
-              res.render("secrets");
-            }else{
-              console.log("No password match.");
-              res.render("login");
-            }
-        } else {
-          console.log("No matching users found");
-          res.render("login");
+      } else {
+          if(foundUser){
+            bcrypt.compare(password, foundUser.password, function(err, result) {
+              if(!err){
+                  if(result){
+                    console.log("Creditials Match");
+                    res.render("secrets");
+                  } else {
+                    console.log("No password match.");
+                    res.render("login");
+                  }
+              }else {
+                console.log(err);
+              }
+            }); // End bcrypt
+          } else {
+            console.log("No matching users found");
+            res.render("login");
+          }
         }
     });//end find
 
