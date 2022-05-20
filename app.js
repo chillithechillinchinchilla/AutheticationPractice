@@ -6,6 +6,7 @@
 // Level 4 uses hashing with salt rounds to obscure passwords. npm install bcrypt
 // Level 5 uses cookies and sessions. npm install passport passport-local passport-local-mongoose express-session
       // Setup express-session first,
+// Level 6 uses OAuth 2.0 to implement Google sign in. npm install passport-google-oauth2
 
 require('dotenv').config();
 const express = require("express");
@@ -16,6 +17,9 @@ const session = require("express-session");
 const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const passportLocalMongoose = require("passport-local-mongoose");
+const GoogleStrategy = require( 'passport-google-oauth2' ).Strategy;
+const findOrCreate = require("mongoose-findorcreate"); // Used for Passport OAuth2 pseudocode
+
 
 const app = express();
 
@@ -47,23 +51,51 @@ mongoose.connect("mongodb://localhost:27017/userDB");
 
 const userSchema = new mongoose.Schema({
   email: String,
-  password: String
+  password: String,
+  googleId: String
 });
 
 // Add passport to the mongoose Schema
 userSchema.plugin(passportLocalMongoose);
-
+userSchema.plugin(findOrCreate);
 // Create mongoose model
 const User = mongoose.model("User", userSchema);
 
 // From passport-local-mongoose. These save you from having to write more code from just using Passport.
 passport.use(new LocalStrategy(User.authenticate()));
 
-// These two are only needed when using sessions.
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+// Pulled from Passport documentation to work with any authorization instead of just mongoose local.
+passport.serializeUser(function(user, cb) {
+  process.nextTick(function() {
+    cb(null, { id: user.id, username: user.username });
+  });
+});
 
+passport.deserializeUser(function(user, cb) {
+  process.nextTick(function() {
+    return cb(null, user);
+  });
+});
 
+///////////////////////////////////// OAuth 2.0 Google ////////////////////////////////////////////
+
+// From passport strategy Google OAuth 2.0
+// Values from environmental files, and taken from google cloud API Setup.
+passport.use(new GoogleStrategy({
+    clientID:     process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/secrets",
+    userProfileURL: 'https://www.googleapis.com/oauth2/v3/userinfo',
+    passReqToCallback   : true
+  },
+  function(request, accessToken, refreshToken, profile, done) {
+    console.log(profile);
+
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return done(err, user);
+    });
+  }
+));
 
 
 ///////////////////////////////////// AUTHENTICATION ROUTES ////////////////////////////////////////////
@@ -91,6 +123,7 @@ app.post("/register", function(req,res){
 // Login for an existing user.
 app.post("/login", function(req,res){
 
+  // create user object to pass into passport
   const user = new User({
     username: req.body.username,
     password: req.body.password
@@ -106,10 +139,24 @@ app.post("/login", function(req,res){
           res.redirect("/secrets");
       });
     }
-
-  })
-
+  });
 }); //end post
+
+///////////////////////////////////// GOOGLE PASSPORT AUTHENTICATION ROUTES ////////////////////////////////////////////
+
+
+
+
+// Authenticate with passport and a google profile login
+app.get('/auth/google',
+  passport.authenticate('google', { scope: [ 'email', 'profile' ] })
+);
+
+app.get( '/auth/google/secrets',
+    passport.authenticate( 'google', {
+        successRedirect: '/secrets',
+        failureRedirect: '/login'
+}));
 
 
 
@@ -130,7 +177,6 @@ app.get('/logout', function(req, res, next) {
   });
   res.redirect('/');
 });
-
 
 app.get("/register", function(req,res){
   res.render("register");
